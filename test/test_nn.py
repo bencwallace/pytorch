@@ -2851,7 +2851,8 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
         input_lengths = [50, 50, 50]
         targets = torch.randint(1, 15, (sum(target_lengths),), dtype=torch.int, device='cuda')
         log_probs = torch.randn(50, 3, 15, dtype=torch.float, device='cuda').log_softmax(2).requires_grad_()
-        res = torch.nn.functional.ctc_loss(log_probs, targets, input_lengths, target_lengths,
+        # self.assertTrue(torch._use_cudnn_ctc_loss(log_probs, targets, input_lengths, target_lengths, blank=0))
+        res = torch.nn.functional.ctc_loss(log_probs, targets, torch.tensor(input_lengths), torch.tensor(target_lengths),
                                            reduction='sum', zero_infinity=True)
         with torch.backends.cudnn.flags(enabled=False):
             res2 = torch.nn.functional.ctc_loss(log_probs, targets.cuda().long(), input_lengths, target_lengths,
@@ -2867,6 +2868,28 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
         self.assertEqual(g2, g3, atol=1e-4, rtol=0)
         self.assertEqual(g1, g2, atol=1e-4, rtol=0)
         self.assertTrue((g1 == g1).all().item())  # check that we don't have NaN
+
+    @unittest.skipIf(not TEST_CUDA, 'CUDA not available')
+    def test_CTCLoss_zero_infinity_cudnn(self):
+        # TODO: ensure cuDNN is available
+        target_lengths = [2]
+        input_lengths = [2]
+        targets = torch.ones(2, dtype=torch.int, device='cpu')  # 2 consecutive 1s require a blank between them
+        log_probs = torch.randn(2, 1, 3, dtype=torch.float, device='cuda').log_softmax(2).requires_grad_()
+        
+        self.assertTrue(torch._use_cudnn_ctc_loss(log_probs, targets, input_lengths, target_lengths, blank=0))
+
+        args = (log_probs, targets, input_lengths, target_lengths)
+        res1 = torch.nn.functional.ctc_loss(*args, reduction='sum', zero_infinity=False)
+        # self.assertFalse(res1.isfinite().all().item())
+        with torch.backends.cudnn.flags(enabled=False):
+            res2 = torch.nn.functional.ctc_loss(*args, reduction='sum', zero_infinity=False)
+        # self.assertFalse(res2.isfinite().all().item())
+        print(res1)
+        print(res2)
+
+        # g1, = torch.autograd.grad(res1.sum(), log_probs)
+        # print(g1)
 
     def test_RNN_cell_no_broadcasting(self):
         def test(cell_module, input, hx, input_size, hidden_size):
