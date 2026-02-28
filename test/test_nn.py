@@ -2870,26 +2870,63 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
         self.assertTrue((g1 == g1).all().item())  # check that we don't have NaN
 
     @unittest.skipIf(not TEST_CUDA, 'CUDA not available')
-    def test_CTCLoss_zero_infinity_cudnn(self):
-        # TODO: ensure cuDNN is available
-        target_lengths = [2]
-        input_lengths = [2]
-        targets = torch.ones(2, dtype=torch.int, device='cpu')  # 2 consecutive 1s require a blank between them
-        log_probs = torch.randn(2, 1, 3, dtype=torch.float, device='cuda').log_softmax(2).requires_grad_()
-        
-        self.assertTrue(torch._use_cudnn_ctc_loss(log_probs, targets, input_lengths, target_lengths, blank=0))
+    def test_CTCLoss_zero_infinity_cudnn1(self):
+        # impossible alignment
+        log_probs = torch.nn.functional.log_softmax(torch.randn(2, 1, 3, device='cuda'), dim=-1)
+        targets = torch.tensor([0, 0], device='cuda', dtype=torch.int32)  # repeated symbol with no blank in between
+        input_lengths = torch.tensor([2], device='cuda', dtype=torch.int32)
+        target_lengths = torch.tensor([2], device='cuda', dtype=torch.int32)
 
-        args = (log_probs, targets, input_lengths, target_lengths)
-        res1 = torch.nn.functional.ctc_loss(*args, reduction='sum', zero_infinity=False)
-        # self.assertFalse(res1.isfinite().all().item())
-        with torch.backends.cudnn.flags(enabled=False):
-            res2 = torch.nn.functional.ctc_loss(*args, reduction='sum', zero_infinity=False)
-        # self.assertFalse(res2.isfinite().all().item())
-        print(res1)
-        print(res2)
+        # force the non-tensor version to run
+        targets = targets.cpu()
+        input_lengths = input_lengths.tolist()
+        target_lengths = target_lengths.tolist()
+        assert torch._use_cudnn_ctc_loss(
+            log_probs=log_probs,
+            targets=targets,
+            input_lengths=input_lengths,
+            target_lengths=target_lengths,
+            blank=0,
+        )
 
-        # g1, = torch.autograd.grad(res1.sum(), log_probs)
-        # print(g1)
+        loss, grad = torch._cudnn_ctc_loss(
+            log_probs,
+            targets,
+            input_lengths,
+            target_lengths,
+            blank=0,
+            deterministic=True,
+            zero_infinity=True,
+        )
+        self.assertTrue(torch.isfinite(loss))
+        self.assertTrue(torch.isfinite(grad).all())
+
+    @unittest.skipIf(not TEST_CUDA, 'CUDA not available')
+    def test_CTCLoss_zero_infinity_cudnn_tensor1(self):
+        # impossible alignment
+        log_probs = torch.nn.functional.log_softmax(torch.randn(2, 1, 3, device='cuda'), dim=-1)
+        targets = torch.tensor([0, 0], device='cuda', dtype=torch.int32)  # repeated symbol with no blank in between
+        input_lengths = torch.tensor([2], device='cuda', dtype=torch.int32)
+        target_lengths = torch.tensor([2], device='cuda', dtype=torch.int32)
+
+        assert torch.ops.aten._use_cudnn_ctc_loss.Tensor(
+            log_probs=log_probs,
+            targets=targets,
+            input_lengths=input_lengths,
+            target_lengths=target_lengths,
+            blank=0,
+        )
+        loss, grad = torch._cudnn_ctc_loss(
+            log_probs,
+            targets,
+            input_lengths,
+            target_lengths,
+            blank=0,
+            deterministic=True,
+            zero_infinity=True,
+        )
+        self.assertTrue(torch.isfinite(loss))
+        self.assertTrue(torch.isfinite(grad).all())
 
     def test_RNN_cell_no_broadcasting(self):
         def test(cell_module, input, hx, input_size, hidden_size):
