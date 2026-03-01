@@ -2936,7 +2936,7 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
         j = (i + 1) % N
         probs = torch.nn.functional.one_hot(torch.tensor([i], device='cuda'), num_classes=500).float()
 
-        log_probs = torch.log(probs).unsqueeze(1)
+        log_probs = torch.log(probs).unsqueeze(1).requires_grad_()
         targets = torch.tensor([j], device='cuda', dtype=torch.int32)
         input_lengths = torch.tensor([1], device='cuda', dtype=torch.int32)
         target_lengths = torch.tensor([1], device='cuda', dtype=torch.int32)
@@ -2953,15 +2953,19 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
             blank=0,
         )
 
-        loss, grad = torch._cudnn_ctc_loss(
-            log_probs,
-            targets,
-            input_lengths,
-            target_lengths,
-            blank=0,
-            deterministic=True,
-            zero_infinity=True,
-        )
+        # loss, grad = torch._cudnn_ctc_loss(
+        #     log_probs,
+        #     targets,
+        #     input_lengths,
+        #     target_lengths,
+        #     blank=0,
+        #     deterministic=True,
+        #     zero_infinity=True,
+        # )
+
+        loss = torch.nn.functional.ctc_loss(log_probs, targets, input_lengths, target_lengths,
+                                               reduction='sum', zero_infinity=True)
+        grad, = torch.autograd.grad(loss, log_probs)
         self.assertTrue(torch.isfinite(loss))
         self.assertTrue(torch.isfinite(grad).all())
 
@@ -2973,7 +2977,7 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
         j = (i + 1) % N
         probs = torch.nn.functional.one_hot(torch.tensor([i], device='cuda'), num_classes=500).float()
 
-        log_probs = torch.log(probs).unsqueeze(1)
+        log_probs = torch.log(probs).unsqueeze(1).requires_grad_()
         targets = torch.tensor([j], device='cuda', dtype=torch.int32)
         input_lengths = torch.tensor([1], device='cuda', dtype=torch.int32)
         target_lengths = torch.tensor([1], device='cuda', dtype=torch.int32)
@@ -2985,15 +2989,19 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
             target_lengths=target_lengths,
             blank=0,
         )
-        loss, grad = torch._cudnn_ctc_loss(
-            log_probs,
-            targets,
-            input_lengths,
-            target_lengths,
-            blank=0,
-            deterministic=True,
-            zero_infinity=True,
-        )
+        # loss, grad = torch._cudnn_ctc_loss(
+        #     log_probs,
+        #     targets,
+        #     input_lengths,
+        #     target_lengths,
+        #     blank=0,
+        #     deterministic=True,
+        #     zero_infinity=True,
+        # )
+
+        loss = torch.nn.functional.ctc_loss(log_probs, targets, input_lengths, target_lengths,
+                                               reduction='sum', zero_infinity=True)
+        grad, = torch.autograd.grad(loss, log_probs)
         self.assertTrue(torch.isfinite(loss))
         self.assertTrue(torch.isfinite(grad).all())
 
