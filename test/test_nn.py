@@ -2893,11 +2893,17 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
             blank=0,
         )
 
-        loss = torch.nn.functional.ctc_loss(log_probs, targets, input_lengths, target_lengths,
+        loss_false = torch.nn.functional.ctc_loss(log_probs, targets, input_lengths, target_lengths,
+                                               reduction='sum', zero_infinity=False)
+        self.assertFalse(torch.isfinite(loss_false))
+        grad_false, = torch.autograd.grad(loss_false, log_probs)
+        self.assertFalse((grad_false == 0).all())
+
+        loss_true = torch.nn.functional.ctc_loss(log_probs, targets, input_lengths, target_lengths,
                                                reduction='sum', zero_infinity=True)
-        grad, = torch.autograd.grad(loss, log_probs)
-        self.assertTrue(torch.isfinite(loss))
-        self.assertTrue(torch.isfinite(grad).all())
+        self.assertTrue(torch.isfinite(loss_true))
+        grad_true, = torch.autograd.grad(loss_true, log_probs)
+        self.assertTrue((grad_true == 0).all())
 
     @unittest.skipIf(not TEST_CUDA, 'CUDA not available')
     def test_CTCLoss_zero_infinity_cudnn_tensor(self):
@@ -2920,11 +2926,17 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
             blank=0,
         )
 
-        loss = torch.nn.functional.ctc_loss(log_probs, targets, input_lengths, target_lengths,
+        loss_false = torch.nn.functional.ctc_loss(log_probs, targets, input_lengths, target_lengths,
+                                               reduction='sum', zero_infinity=False)
+        self.assertFalse(torch.isfinite(loss_false))
+        grad_false, = torch.autograd.grad(loss_false, log_probs)
+        self.assertFalse((grad_false == 0).all())
+
+        loss_true = torch.nn.functional.ctc_loss(log_probs, targets, input_lengths, target_lengths,
                                                reduction='sum', zero_infinity=True)
-        grad, = torch.autograd.grad(loss, log_probs)
-        self.assertTrue(torch.isfinite(loss))
-        self.assertTrue(torch.isfinite(grad).all())
+        self.assertTrue(torch.isfinite(loss_true))
+        grad_true, = torch.autograd.grad(loss_true, log_probs)
+        self.assertTrue((grad_true == 0).all())
 
     def test_RNN_cell_no_broadcasting(self):
         def test(cell_module, input, hx, input_size, hidden_size):
